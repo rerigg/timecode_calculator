@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Timecode Calc</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Timecode">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1c1e22">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231a1c20'/%3E%3Ctext x='50' y='62' font-family='monospace' font-size='38' font-weight='700' fill='%23ffb13d' text-anchor='middle'%3ETC%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231a1c20'/%3E%3Ctext x='50' y='62' font-family='monospace' font-size='38' font-weight='700' fill='%23ffb13d' text-anchor='middle'%3ETC%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --housing:#22252a;
+    --panel:#17191d;
+    --recess:#0a0b0c;
+    --amber:#ffb13d;
+    --amber-dim:#4a3a1c;
+    --amber-glow:rgba(255,177,61,.45);
+    --key:#34373e;
+    --key-text:#e7e4dd;
+    --key-op:#3c2f1e;
+    --key-op-text:#ffc673;
+    --key-mem:#2a323c;
+    --key-mem-text:#a9c4d8;
+    --key-active:#454952;
+    --text-dim:#8a8d93;
+    --danger:#c9694c;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:var(--housing);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+    color:var(--key-text);
+    overscroll-behavior:none;
+    user-select:none;
+  }
+  body{
+    display:flex; justify-content:center;
+    padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+    min-height:100vh;
+  }
+  .device{
+    width:100%; max-width:420px;
+    display:flex; flex-direction:column; gap:12px;
+  }
+  header{
+    display:flex; align-items:baseline; justify-content:space-between;
+    padding:2px 4px 0;
+  }
+  header .name{ font-size:15px; font-weight:600; color:var(--key-text); letter-spacing:.2px; }
+  header .tag{ font-size:11.5px; color:var(--text-dim); }
+
+  /* fps selector */
+  .fps-row{
+    display:flex; flex-wrap:wrap; gap:6px;
+    background:var(--panel); border-radius:14px; padding:8px;
+  }
+  .fps-btn{
+    flex:1 1 auto; min-width:52px;
+    background:transparent; border:1px solid #3a3d44;
+    color:var(--text-dim); font-size:12.5px; font-weight:600;
+    padding:7px 4px; border-radius:9px; text-align:center;
+    font-variant-numeric:tabular-nums;
+  }
+  .fps-btn.active{
+    background:var(--amber-dim); border-color:var(--amber); color:var(--amber);
+  }
+  .df-row{ display:flex; gap:6px; margin-top:6px; }
+  .df-btn{
+    flex:1; background:transparent; border:1px solid #3a3d44; color:var(--text-dim);
+    font-size:12px; font-weight:700; letter-spacing:.5px; padding:6px; border-radius:9px;
+  }
+  .df-btn.active{ background:var(--amber-dim); border-color:var(--amber); color:var(--amber); }
+  .df-btn:disabled{ opacity:.35; }
+
+  .frame-mode-row{ display:flex; }
+  .frame-mode-btn{
+    width:100%; background:var(--panel); border:1px solid #3a3d44; color:var(--text-dim);
+    font-size:12.5px; font-weight:700; letter-spacing:.3px; padding:9px; border-radius:12px;
+  }
+  .frame-mode-btn.active{ background:var(--amber-dim); border-color:var(--amber); color:var(--amber); }
+
+  /* display */
+  .screen-wrap{
+    background:var(--panel); border-radius:16px; padding:10px;
+  }
+  .screen{
+    background:var(--recess); border-radius:10px;
+    padding:22px 16px 16px;
+    display:flex; flex-direction:column; align-items:flex-end;
+    box-shadow: inset 0 2px 10px rgba(0,0,0,.6);
+    position:relative;
+    min-height:96px;
+    justify-content:center;
+  }
+  .op-indicator{
+    position:absolute; top:10px; left:16px;
+    font-size:13px; color:var(--amber); opacity:.85; font-weight:700;
+    font-variant-numeric:tabular-nums;
+  }
+  .mem-indicator{
+    position:absolute; top:10px; right:16px;
+    font-size:11px; letter-spacing:1px; color:var(--amber); opacity:0; font-weight:700;
+  }
+  .mem-indicator.show{ opacity:.85; }
+  .readout{
+    font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    font-size:40px; font-weight:600; letter-spacing:2px;
+    color:var(--amber);
+    text-shadow:0 0 14px var(--amber-glow);
+    line-height:1.1;
+    white-space:nowrap;
+  }
+  .readout .unit{ font-size:12px; color:var(--text-dim); text-shadow:none; margin-top:2px; display:block; text-align:right; letter-spacing:1.5px; font-family:inherit;}
+
+  /* memory + tape row */
+  .util-row{ display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+  .util-row button{
+    background:var(--key-mem); color:var(--key-mem-text);
+    border:none; border-radius:12px; font-size:13px; font-weight:700;
+    padding:12px 2px;
+  }
+  .util-row button:active{ background:#3a4552; }
+  .util-row button.tape-btn{ background:var(--key); color:var(--key-text); }
+
+  /* keypad */
+  .keypad{ display:grid; grid-template-columns:repeat(4,1fr); gap:9px; }
+  .keypad button{
+    border:none; border-radius:14px; padding:20px 0; font-size:22px; font-weight:600;
+    background:var(--key); color:var(--key-text); font-variant-numeric:tabular-nums;
+  }
+  .keypad button:active{ background:var(--key-active); }
+  .keypad button.op{ background:var(--key-op); color:var(--key-op-text); font-size:24px; }
+  .keypad button.op:active{ background:#4d3c25; }
+  .keypad button.clear{ background:var(--danger); color:#2a1410; }
+  .keypad button.clear:active{ background:#b25a3f; }
+  .keypad button.equals{ background:var(--amber); color:#2a1a05; }
+  .keypad button.equals:active{ background:#e6a038; }
+
+  footer{ text-align:center; padding-top:2px;}
+  footer span{ font-size:10.5px; color:var(--text-dim); }
+
+  /* tape drawer */
+  .tape-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.55);
+    display:flex; align-items:flex-end; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity .18s ease;
+    z-index:50;
+  }
+  .tape-overlay.open{ opacity:1; pointer-events:auto; }
+  .tape-sheet{
+    width:100%; max-width:420px; background:var(--panel);
+    border-radius:20px 20px 0 0; padding:16px 16px max(16px, env(safe-area-inset-bottom));
+    max-height:70vh; display:flex; flex-direction:column;
+    transform:translateY(12px); transition:transform .18s ease;
+  }
+  .tape-overlay.open .tape-sheet{ transform:translateY(0); }
+  .tape-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .tape-head h2{ font-size:15px; margin:0; font-weight:700; }
+  .tape-head button{ background:none; border:none; color:var(--text-dim); font-size:14px; font-weight:600; }
+  .tape-list{ overflow-y:auto; display:flex; flex-direction:column-reverse; gap:0; }
+  .tape-list div{
+    font-family:ui-monospace,"SF Mono",monospace; font-size:14px; color:var(--key-text);
+    padding:9px 2px; border-bottom:1px solid #2a2d33;
+  }
+  .tape-empty{ color:var(--text-dim); font-size:13px; padding:14px 2px; text-align:center; }
+  .tape-clear{
+    margin-top:10px; background:transparent; border:1px solid var(--danger);
+    color:var(--danger); font-weight:700; font-size:13px; padding:10px; border-radius:10px;
+  }
+</style>
+</head>
+<body>
+<div class="device">
+
+  <header>
+    <span class="name">Timecode Calc</span>
+    <span class="tag">add · subtract · multiply · divide</span>
+  </header>
+
+  <div class="fps-row" id="fpsRow"></div>
+  <div class="df-row">
+    <button class="df-btn" id="ndfBtn">NDF</button>
+    <button class="df-btn" id="dfBtn">DF</button>
+  </div>
+
+  <div class="frame-mode-row">
+    <button class="frame-mode-btn" id="frameModeBtn">Frame # → Timecode</button>
+  </div>
+
+  <div class="screen-wrap">
+    <div class="screen">
+      <span class="op-indicator" id="opIndicator"></span>
+      <span class="mem-indicator" id="memIndicator">M</span>
+      <span class="readout" id="readout">00:00:00:00</span>
+      <span class="unit" id="unitLabel">timecode</span>
+    </div>
+  </div>
+
+  <div class="util-row">
+    <button class="tape-btn" id="tapeBtn">Tape</button>
+    <button id="mcBtn">MC</button>
+    <button id="mminusBtn">M−</button>
+    <button id="mplusBtn">M+</button>
+    <button id="mrBtn">MR</button>
+  </div>
+
+  <div class="keypad">
+    <button data-d="7">7</button>
+    <button data-d="8">8</button>
+    <button data-d="9">9</button>
+    <button class="op" data-op="÷">÷</button>
+
+    <button data-d="4">4</button>
+    <button data-d="5">5</button>
+    <button data-d="6">6</button>
+    <button class="op" data-op="×">×</button>
+
+    <button data-d="1">1</button>
+    <button data-d="2">2</button>
+    <button data-d="3">3</button>
+    <button class="op" data-op="−">−</button>
+
+    <button class="clear" id="clearBtn">C</button>
+    <button data-d="0">0</button>
+    <button class="equals" id="equalsBtn">=</button>
+    <button class="op" data-op="+">+</button>
+  </div>
+
+  <footer><span>Tap the converter button to switch direction · C exits back to the calculator</span></footer>
+</div>
+
+<div class="tape-overlay" id="tapeOverlay">
+  <div class="tape-sheet">
+    <div class="tape-head">
+      <h2>Tape</h2>
+      <button id="tapeCloseBtn">Done</button>
+    </div>
+    <div class="tape-list" id="tapeList"></div>
+    <button class="tape-clear" id="tapeClearBtn">Clear Tape</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var FPS_LIST = [12, 23.98, 24, 25, 29.97, 30, 50, 59.97, 60];
+  var STORAGE_KEY = "timecodeCalc.v1";
+
+  var state = {
+    fps: 29.97,
+    df: false,
+    accumulator: null,   // frames (integer) representing the running total
+    pendingOp: null,     // '+','-','×','÷'
+    entryBuffer: "",      // raw typed digits
+    entryTouched: false,  // has the user typed since last op/equals/clear
+    entryIsNumeric: false,// true when entry represents a plain number (for × ÷ operand, or frame->tc mode)
+    frameEntryMode: false,// true when the Frame#/Timecode converter is active
+    convDirection: "frameToTc", // "frameToTc" or "tcToFrame" — which way the converter is set
+    memory: 0,
+    tape: []
+  };
+
+  function frameNumericEntry(){
+    return state.frameEntryMode && state.convDirection === "frameToTc";
+  }
+
+  function load(){
+    try{
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return;
+      var saved = JSON.parse(raw);
+      if(saved.fps) state.fps = saved.fps;
+      if(typeof saved.df === "boolean") state.df = saved.df;
+      if(typeof saved.memory === "number") state.memory = saved.memory;
+      if(Array.isArray(saved.tape)) state.tape = saved.tape;
+    }catch(e){ /* ignore corrupt storage */ }
+  }
+  function persist(){
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        fps: state.fps, df: state.df, memory: state.memory, tape: state.tape
+      }));
+    }catch(e){ /* storage unavailable, continue silently */ }
+  }
+
+  // ---------- timecode <-> frame math ----------
+  function nominalFps(fps){ return Math.round(fps); }
+  function dfAllowed(fps){ return fps === 29.97 || fps === 59.97; }
+
+  function framesToTimecode(frameNumberIn, fps, df){
+    var nfps = nominalFps(fps);
+    var useDf = df && dfAllowed(fps);
+    var dropFrames = useDf ? Math.round(nfps * 0.066666) : 0;
+    var framesPer24Hours = Math.round(fps * 3600) * 24;
+    var framesPer10Minutes = Math.round(fps * 600);
+    var framesPerMinute = (nfps * 60) - dropFrames;
+
+    var frameNumber = ((frameNumberIn % framesPer24Hours) + framesPer24Hours) % framesPer24Hours;
+
+    if(useDf){
+      var d = Math.floor(frameNumber / framesPer10Minutes);
+      var m = frameNumber % framesPer10Minutes;
+      if(m > dropFrames){
+        frameNumber += (dropFrames * 9 * d) + dropFrames * Math.floor((m - dropFrames) / framesPerMinute);
+      } else {
+        frameNumber += dropFrames * 9 * d;
+      }
+    }
+
+    var frames = frameNumber % nfps;
+    var seconds = Math.floor(frameNumber / nfps) % 60;
+    var minutes = Math.floor(frameNumber / (nfps * 60)) % 60;
+    var hours = Math.floor(frameNumber / (nfps * 3600));
+
+    return { hours: hours, minutes: minutes, seconds: seconds, frames: frames };
+  }
+
+  function parseEntryToFrames(buffer, fps){
+    var padded = ("00000000" + buffer).slice(-8);
+    var h = parseInt(padded.slice(0,2), 10);
+    var m = parseInt(padded.slice(2,4), 10);
+    var s = parseInt(padded.slice(4,6), 10);
+    var f = parseInt(padded.slice(6,8), 10);
+    var nfps = nominalFps(fps);
+    return h*3600*nfps + m*60*nfps + s*nfps + f;
+  }
+
+  function pad2(n){ return (n < 10 ? "0" : "") + n; }
+
+  function formatFrames(frames, fps, df){
+    var t = framesToTimecode(frames, fps, df);
+    var useDf = df && dfAllowed(fps);
+    var sep = useDf ? ";" : ":";
+    return pad2(t.hours) + ":" + pad2(t.minutes) + ":" + pad2(t.seconds) + sep + pad2(t.frames);
+  }
+
+  // ---------- calculator state helpers ----------
+  function currentEntryValue(){
+    // returns { frames } if timecode, or { number } if numeric mode
+    if(state.entryIsNumeric){
+      var n = parseFloat(state.entryBuffer || "0");
+      if(isNaN(n)) n = 0;
+      return { numeric:true, value:n };
+    } else {
+      return { numeric:false, value: parseEntryToFrames(state.entryBuffer || "0", state.fps) };
+    }
+  }
+
+  function applyOp(acc, op, entryVal){
+    switch(op){
+      case "+": return acc + entryVal.value;
+      case "−": return acc - entryVal.value;
+      case "×": return Math.round(acc * entryVal.value);
+      case "÷": return entryVal.value !== 0 ? Math.round(acc / entryVal.value) : acc;
+      default: return acc;
+    }
+  }
+
+  function opRightLabel(op, entryVal){
+    if(op === "×" || op === "÷") return String(entryVal.value);
+    return formatFrames(entryVal.value, state.fps, state.df);
+  }
+
+  function commitPendingIfAny(){
+    if(state.pendingOp !== null){
+      var entryVal = currentEntryValue();
+      var leftLabel = formatFrames(state.accumulator, state.fps, state.df);
+      var rightLabel = opRightLabel(state.pendingOp, entryVal);
+      var result = applyOp(state.accumulator, state.pendingOp, entryVal);
+      var resultLabel = formatFrames(result, state.fps, state.df);
+      state.tape.push(leftLabel + " " + state.pendingOp + " " + rightLabel + " = " + resultLabel);
+      state.accumulator = result;
+    } else {
+      // no pending op yet: first value becomes the accumulator
+      var v = currentEntryValue();
+      state.accumulator = v.numeric ? v.value : v.value;
+    }
+  }
+
+  // ---------- button actions ----------
+  function pressDigit(d){
+    if(d === "." ){
+      if(!state.entryIsNumeric || state.frameEntryMode) return; // decimals only meaningful for × ÷ operand
+      if(state.entryBuffer.indexOf(".") !== -1) return;
+      state.entryBuffer += ".";
+    } else {
+      if(state.entryIsNumeric){
+        if(state.entryBuffer.length >= 9) return;
+        state.entryBuffer += d;
+      } else {
+        state.entryBuffer = (state.entryBuffer + d).slice(-8);
+      }
+    }
+    state.entryTouched = true;
+    render();
+  }
+
+  function pressBackspace(){
+    if(state.entryBuffer.length > 0){
+      state.entryBuffer = state.entryBuffer.slice(0, -1);
+      state.entryTouched = true;
+      render();
+    }
+  }
+
+  function pressOp(op){
+    if(state.pendingOp !== null && state.entryTouched){
+      // a new operand was typed after a pending op: fold it in
+      commitPendingIfAny();
+    } else if(state.pendingOp === null){
+      if(state.entryTouched){
+        state.accumulator = currentEntryValue().value; // first operand just typed
+      } else if(state.accumulator === null){
+        state.accumulator = 0; // operator pressed with nothing entered at all
+      }
+      // else: an existing result is already the accumulator — keep it as the left operand
+    }
+    // if a pendingOp exists but nothing new was typed, this just swaps the operator
+    state.pendingOp = op;
+    state.entryBuffer = "";
+    state.entryTouched = false;
+    state.entryIsNumeric = frameNumericEntry() ? true : (!state.frameEntryMode && (op === "×" || op === "÷"));
+    persist();
+    render();
+  }
+
+  function pressEquals(){
+    if(state.pendingOp === null){
+      if(!state.entryTouched) { render(); return; }
+      var entryVal = currentEntryValue();
+      if(state.frameEntryMode){
+        var tcLabel = formatFrames(entryVal.value, state.fps, state.df);
+        if(state.convDirection === "frameToTc"){
+          state.tape.push(entryVal.value + " frames = " + tcLabel);
+        } else {
+          state.tape.push(tcLabel + " = " + entryVal.value + " frames");
+        }
+      }
+      // no operator pending, "=" just normalizes/corrects the typed value
+      state.accumulator = entryVal.value;
+    } else {
+      commitPendingIfAny();
+      state.pendingOp = null;
+    }
+    state.entryBuffer = "";
+    state.entryTouched = false;
+    state.entryIsNumeric = frameNumericEntry();
+    persist();
+    render();
+  }
+
+  function pressClear(){
+    // Clear also backs out of the converter, back to the normal calculator
+    if(state.frameEntryMode){
+      state.frameEntryMode = false;
+      state.convDirection = "frameToTc";
+    }
+    state.accumulator = null;
+    state.pendingOp = null;
+    state.entryBuffer = "";
+    state.entryTouched = false;
+    state.entryIsNumeric = false;
+    render();
+  }
+
+  function toggleFrameMode(){
+    if(!state.frameEntryMode){
+      state.frameEntryMode = true;
+      state.convDirection = "frameToTc";
+    } else if(state.convDirection === "frameToTc"){
+      state.convDirection = "tcToFrame"; // switch direction, stay in converter
+    } else {
+      state.convDirection = "frameToTc"; // switch back
+    }
+    state.pendingOp = null;
+    state.entryBuffer = "";
+    state.entryTouched = false;
+    state.entryIsNumeric = frameNumericEntry();
+    render();
+  }
+
+  function displayedFrames(){
+    if(state.entryTouched && !state.entryIsNumeric){
+      return parseEntryToFrames(state.entryBuffer, state.fps);
+    }
+    return state.accumulator || 0;
+  }
+
+  function pressMPlus(){
+    state.memory += displayedFrames();
+    persist(); render();
+  }
+  function pressMMinus(){
+    state.memory -= displayedFrames();
+    persist(); render();
+  }
+  function pressMR(){
+    state.accumulator = state.memory;
+    state.pendingOp = null;
+    state.entryBuffer = "";
+    state.entryTouched = false;
+    state.entryIsNumeric = frameNumericEntry();
+    render();
+  }
+  function pressMC(){
+    state.memory = 0;
+    persist(); render();
+  }
+
+  function setFps(fps){
+    state.fps = fps;
+    if(!dfAllowed(fps)) state.df = false;
+    persist(); render();
+  }
+  function setDf(df){
+    if(df && !dfAllowed(state.fps)) return;
+    state.df = df;
+    persist(); render();
+  }
+
+  // ---------- rendering ----------
+  var readoutEl = document.getElementById("readout");
+  var unitLabelEl = document.getElementById("unitLabel");
+  var opIndicatorEl = document.getElementById("opIndicator");
+  var memIndicatorEl = document.getElementById("memIndicator");
+  var fpsRowEl = document.getElementById("fpsRow");
+  var ndfBtn = document.getElementById("ndfBtn");
+  var dfBtn = document.getElementById("dfBtn");
+  var frameModeBtn = document.getElementById("frameModeBtn");
+
+  function buildFpsRow(){
+    fpsRowEl.innerHTML = "";
+    FPS_LIST.forEach(function(f){
+      var b = document.createElement("button");
+      b.className = "fps-btn";
+      b.textContent = (f % 1 === 0 ? f : f.toFixed(2)) + " fps";
+      b.addEventListener("click", function(){ setFps(f); });
+      b.dataset.fps = f;
+      fpsRowEl.appendChild(b);
+    });
+  }
+
+  function render(){
+    // fps chips
+    Array.prototype.forEach.call(fpsRowEl.children, function(b){
+      b.classList.toggle("active", parseFloat(b.dataset.fps) === state.fps);
+    });
+    var allowDf = dfAllowed(state.fps);
+    ndfBtn.classList.toggle("active", !state.df);
+    dfBtn.classList.toggle("active", state.df);
+    dfBtn.disabled = !allowDf;
+    frameModeBtn.classList.toggle("active", state.frameEntryMode);
+    frameModeBtn.textContent = (state.frameEntryMode && state.convDirection === "tcToFrame")
+      ? "Timecode → Frame #" : "Frame # → Timecode";
+
+    // display
+    if(state.entryTouched){
+      if(state.entryIsNumeric){
+        readoutEl.textContent = state.entryBuffer.length ? state.entryBuffer : "0";
+        unitLabelEl.textContent = "frame #";
+      } else {
+        var padded = ("00000000" + state.entryBuffer).slice(-8);
+        var sep = (state.df && dfAllowed(state.fps)) ? ";" : ":";
+        readoutEl.textContent = padded.slice(0,2)+":"+padded.slice(2,4)+":"+padded.slice(4,6)+sep+padded.slice(6,8);
+        unitLabelEl.textContent = "timecode";
+      }
+    } else if(state.frameEntryMode && state.convDirection === "tcToFrame"){
+      readoutEl.textContent = String(state.accumulator || 0);
+      unitLabelEl.textContent = formatFrames(state.accumulator || 0, state.fps, state.df);
+    } else {
+      readoutEl.textContent = formatFrames(state.accumulator || 0, state.fps, state.df);
+      unitLabelEl.textContent = state.frameEntryMode ? ((state.accumulator || 0) + " frames") : "timecode";
+    }
+
+    opIndicatorEl.textContent = state.pendingOp || "";
+    memIndicatorEl.classList.toggle("show", state.memory !== 0);
+
+    renderTape();
+  }
+
+  var tapeListEl = document.getElementById("tapeList");
+  function renderTape(){
+    if(state.tape.length === 0){
+      tapeListEl.innerHTML = '<div class="tape-empty">No calculations yet.</div>';
+      return;
+    }
+    tapeListEl.innerHTML = state.tape.map(function(line){
+      return "<div>" + line + "</div>";
+    }).join("");
+  }
+
+  // ---------- wire up buttons ----------
+  document.querySelectorAll(".keypad [data-d]").forEach(function(btn){
+    btn.addEventListener("click", function(){ pressDigit(btn.dataset.d); });
+  });
+  document.querySelectorAll(".keypad [data-op]").forEach(function(btn){
+    btn.addEventListener("click", function(){ pressOp(btn.dataset.op); });
+  });
+  document.getElementById("equalsBtn").addEventListener("click", pressEquals);
+  document.getElementById("clearBtn").addEventListener("click", pressClear);
+  document.getElementById("mplusBtn").addEventListener("click", pressMPlus);
+  document.getElementById("mminusBtn").addEventListener("click", pressMMinus);
+  document.getElementById("mrBtn").addEventListener("click", pressMR);
+  document.getElementById("mcBtn").addEventListener("click", pressMC);
+  ndfBtn.addEventListener("click", function(){ setDf(false); });
+  dfBtn.addEventListener("click", function(){ setDf(true); });
+  frameModeBtn.addEventListener("click", toggleFrameMode);
+
+  var tapeOverlay = document.getElementById("tapeOverlay");
+  document.getElementById("tapeBtn").addEventListener("click", function(){
+    renderTape();
+    tapeOverlay.classList.add("open");
+  });
+  document.getElementById("tapeCloseBtn").addEventListener("click", function(){
+    tapeOverlay.classList.remove("open");
+  });
+  document.getElementById("tapeClearBtn").addEventListener("click", function(){
+    state.tape = [];
+    persist();
+    renderTape();
+  });
+  tapeOverlay.addEventListener("click", function(e){
+    if(e.target === tapeOverlay) tapeOverlay.classList.remove("open");
+  });
+
+  // keyboard support (handy when testing on a laptop trackpad/keyboard mirrored to phone)
+  document.addEventListener("keydown", function(e){
+    if(e.key >= "0" && e.key <= "9"){ pressDigit(e.key); return; }
+    if(e.key === "."){ pressDigit("."); return; }
+    if(e.key === "+"){ pressOp("+"); return; }
+    if(e.key === "-"){ pressOp("−"); return; }
+    if(e.key === "*"){ pressOp("×"); return; }
+    if(e.key === "/"){ e.preventDefault(); pressOp("÷"); return; }
+    if(e.key === "Enter" || e.key === "="){ pressEquals(); return; }
+    if(e.key === "Backspace"){ pressBackspace(); return; }
+    if(e.key === " "){ e.preventDefault(); pressClear(); return; }
+    if(e.key === "f" || e.key === "F"){ toggleFrameMode(); return; }
+  });
+
+  // init
+  load();
+  buildFpsRow();
+  render();
+})();
+</script>
+</body>
+</html>
