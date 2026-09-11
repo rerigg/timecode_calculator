@@ -231,7 +231,7 @@
     <button class="op" data-op="+">+</button>
   </div>
 
-  <footer><span>Tap the converter button to switch direction · C exits back to the calculator</span></footer>
+  <footer><span>+/− a raw frame amount: press +/− then tap the converter button, then type the number</span></footer>
 </div>
 
 <div class="tape-overlay" id="tapeOverlay">
@@ -478,7 +478,9 @@
     } else {
       state.convDirection = "frameToTc"; // switch back
     }
-    state.pendingOp = null;
+    // deliberately leave pendingOp/accumulator untouched: this lets you press
+    // + or − first, then flip into frame mode just to type a raw frame amount
+    // as that operand, without losing the calculation you already started.
     state.entryBuffer = "";
     state.entryTouched = false;
     state.entryIsNumeric = frameNumericEntry();
