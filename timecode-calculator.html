@@ -47,12 +47,6 @@
     width:100%; max-width:420px;
     display:flex; flex-direction:column; gap:12px;
   }
-  header{
-    display:flex; align-items:baseline; justify-content:space-between;
-    padding:2px 4px 0;
-  }
-  header .name{ font-size:15px; font-weight:600; color:var(--key-text); letter-spacing:.2px; }
-  header .tag{ font-size:11.5px; color:var(--text-dim); }
 
   /* fps selector */
   .fps-row{
@@ -177,11 +171,6 @@
 <body>
 <div class="device">
 
-  <header>
-    <span class="name">Timecode Calc</span>
-    <span class="tag">add · subtract · multiply · divide</span>
-  </header>
-
   <div class="fps-row" id="fpsRow"></div>
   <div class="df-row">
     <button class="df-btn" id="ndfBtn">NDF</button>
@@ -249,7 +238,7 @@
 (function(){
   "use strict";
 
-  var FPS_LIST = [12, 23.98, 24, 25, 29.97, 30, 50, 59.97, 60];
+  var FPS_LIST = [23.98, 24, 25, 29.97, 30, 50, 59.97, 60];
   var STORAGE_KEY = "timecodeCalc.v1";
 
   var state = {
